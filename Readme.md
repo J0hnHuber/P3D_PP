@@ -1,162 +1,171 @@
-# 🛠️ P3D Postprozessor-Plugin-System – Entwicklerdokumentation
+# P3D Postprozessor System – Entwicklerdokumentation
 
-## 📌 Ziel dieser Anleitung
-
-Diese Dokumentation richtet sich an Entwickler mit C#-Erfahrung, die ein Plugin für das **P3D CAM-System** schreiben möchten. Sie beschreibt die Struktur, Schnittstellen und Konzepte des **Postprozessor-Systems**, sodass du **ohne Beispielcode** direkt loslegen kannst.
+Dieses Dokument beschreibt das generische Postprozessor-System von P3D, mit dem du APT-Code (generischer Maschinen-Code) in maschinenspezifischen Code (z. B. G-Code) umwandeln kannst. Die Anleitung richtet sich an Entwickler mit C#-Kenntnissen, die ohne Vorwissen direkt eigene Postprozessoren erstellen möchten.
 
 ---
 
-## 📁 Projektstruktur
+## Überblick
 
-Ein Postprozessor besteht aus einer .NET-Klasse, die das Interface `IP3DPostProcessor` implementiert. Diese Klasse wird **per Reflection** aus einer externen DLL geladen und verarbeitet APT-kompatiblen Code aus P3D zu fertigem G-Code.
+Das P3D Postprozessor-System stellt eine Schnittstelle (`IP3DPostProcessor`) bereit, die vom Postprozessor-Plugin implementiert wird. Die Aufgabe des Postprozessors ist es, die generischen Bewegungs- und Steuerdaten (APT-Code) in den spezifischen Maschinenbefehl umzuwandeln.
 
-### Anforderungen:
-- Sprache: **C# (.NET 4.8 oder höher empfohlen)**
-- Ausgabe: **DLL** mit mindestens einer Klasse, die `IP3DPostProcessor` implementiert
-- Abhängigkeiten: Referenz auf die `P3DPP.dll` (enthält Interfaces und Basisklassen)
+Die Ausgabe erfolgt zeilenweise mit einem internen Register-System, das formatierte Steuerzeichen (z. B. `X123.456`, `G01`, `F300`) effizient verwaltet.
 
 ---
 
-## 🔌 Interface: `IP3DPostProcessor`
+## 1. Grundstruktur eines Postprozessors
 
-Folgende Methoden muss dein Postprozessor implementieren:
+Ein Postprozessor wird als C#-Klasse implementiert, die das Interface `IP3DPostProcessor` erfüllt. Die wichtigsten Methoden sind:
 
-| Methode       | Wird aufgerufen bei …            | Zweck                                               |
-|---------------|----------------------------------|------------------------------------------------------|
-| `Initialize`  | Start der Verarbeitung           | Setup, Benutzerabfragen, Register definieren        |
-| `Fedrat`      | `FEDRAT` Anweisung               | Feedrate (Vorschub) setzen                          |
-| `Goto`        | `GOTO` Anweisung                 | Bewegungskommandos erzeugen                         |
-| `Rapid`       | `RAPID` Anweisung                | Schnelle Bewegung aktivieren                        |
-| `PPrint`      | `PPRINT` Kommentar                | Kommentar in G-Code schreiben                       |
-| `MultAx`      | `MULTAX` Maschinenmodus          | Zustand für Mehrachsenbetrieb setzen                |
-| `Done`        | Ende der Verarbeitung            | G-Code manipulieren, Nachbearbeitung                |
-
----
-
-## 🧰 Das `Register`-System
-
-Die zentrale Komponente zur G-Code-Generierung ist das **`Register`-System**. Du arbeitest nicht direkt mit Strings, sondern setzt Werte für benannte "Register", die dann als G-Code zusammengesetzt werden.
-
-### 🔧 Typische Befehle:
-
-| Funktion                        | Beschreibung                                          |
-|---------------------------------|-------------------------------------------------------|
-| `RegisterAdd(name, ...)`        | Neuen Register (z. B. "X") definieren                 |
-| `RegisterSetValue(name, value)` | Wert in ein Register schreiben                       |
-| `OutBlock()`                    | Aktuelle Registerwerte als G-Code-Zeile ausgeben     |
-| `ShouldOutblock(params)`        | Gibt true zurück, wenn Registerwerte sich geändert haben |
-| `StartAutoLineNumber(...)`      | Automatische Zeilennummern wie `N10`, `N20`, ...     |
-| `Output(string)`                | Rohtext direkt in die Ausgabe schreiben              |
-| `RegisterGetCode()`             | Gesamten generierten G-Code abrufen (array of strings) |
-| `RegisterSetCode(lines)`        | G-Code nachbearbeiten                                |
+| Methode        | Zweck                                                       |
+|----------------|-------------------------------------------------------------|
+| `Initialize`   | Initialisierung zu Beginn der Verarbeitung (Parameter, Setup) |
+| `Fedrat`       | Übergabe von Vorschubwerten                                 |
+| `Goto`         | Lineare Bewegungsbefehle                                    |
+| `Rapid`        | Schnelle Positionierungsbewegungen                         |
+| `PPrint`       | Ausgabe von Kommentaren                                     |
+| `MultAx`       | Steuerung von Mehr-Achsen-Modi                             |
+| `Done`         | Abschluss der Verarbeitung (Nachbearbeitung)               |
 
 ---
 
-## 🧩 Datenzugriff: `CLData`
+## 2. Umgang mit Eingaben vom Benutzer
 
-Alle Methoden wie `Fedrat(CLData data)` erhalten ein `CLData`-Objekt, das alle **Parameter der APT-Anweisung** enthält.
+Das System stellt eine flexible Eingabemaske (`FormInput`) zur Verfügung, mit der du Parameter vom Benutzer zur Laufzeit abfragen kannst:
 
-### Zugriff:
-```csharp
-var feedrate = data["F"];         // Zugriff auf numerische Werte
-var comment = data["Comment"];    // Zugriff auf Strings
-```
-
-**Typische Schlüssel:**
-- `X`, `Y`, `Z`
-- `F` (Feedrate)
-- `Comment` (bei `PPRINT`)
-- `State` (bei `MULTAX`)
-
----
-
-## 📋 Benutzerabfragen: `FormInput`
-
-Du kannst beim Start über ein modales Dialogfenster Benutzereingaben abfragen. Die Eingaben werden als Dictionary zurückgegeben.
-
-### Schritte:
-1. Erstelle eine Liste von `InputFormParameter`
-2. Übergib sie an `FormInput.TryGetValues(...)`
-3. Werte das Ergebnis aus
-
-### Unterstützte Eingabetypen:
-- `Text` (freier Text)
-- `Integer` (Ganzzahl)
-- `Float` (Gleitkomma)
-- `Checkbox` (bool)
-- `ComboBox` (Auswahl aus Liste)
-
----
-
-## 🔄 Ablauf beim Ausführen
-
-P3D ruft dein Plugin automatisch wie folgt auf:
-
-1. `Initialize(CLData data)`
-2. Für jede APT-Anweisung:
-    - Z. B. `Fedrat(data)`, `Goto(data)` etc.
-3. `Done()` nach der letzten Zeile
-
----
-
-## ✅ Mindestanforderungen an dein Plugin
-
-Damit dein Plugin funktioniert, musst du:
-- Eine öffentliche Klasse mit Standard-Konstruktor haben
-- Diese Klasse muss `IP3DPostProcessor` implementieren
-- Du musst `Initialize()` korrekt implementieren
-- Mindestens ein Register definieren (z. B. `X`, `Y`, `Z`)
-
----
-
-## 💡 Erweiterungsideen
-
-Du kannst dein Plugin beliebig erweitern:
-- Eigene State-Variablen (z. B. für Modi oder Flags)
-- Zusatzlogik wie Werkzeugwechsel, Sicherheitsabfragen
-- Erkennung von Sonderbewegungen (z. B. Helix)
-- Ausgabe von Maschinen-spezifischem G-Code
-
----
-
-## 🧪 Debugging-Tipps
-
-- Verwende `MessageBox.Show(...)` zum Debuggen
-- Gib Zwischenschritte als Kommentare per `Output()` aus
-- Manipuliere den G-Code in `Done()` bevor er gespeichert wird
-
----
-
-## 📦 Deployment
-
-- Erzeuge eine `.dll` mit deiner Plugin-Klasse
-- Platziere die DLL im Plugin-Ordner von P3D
-- Starte P3D – dein Plugin wird automatisch geladen
-- P3D sucht nach Klassen mit `IP3DPostProcessor` Interface
-
----
-
-## 📘 Fazit
-
-Das Postprozessor-System in P3D ist flexibel und modular. Durch die Kombination aus Registersystem, Benutzerabfragen und Datenmanipulation in `Done()` kannst du jede Art von Maschinenpostprozessor für G-Code, Heidenhain, Fanuc, etc. erzeugen.
+- Unterstützte Eingabetypen: Text, Checkbox, Integer, Float, ComboBox
+- Beispielaufruf:
 
 ```csharp
-// Beispiel-Struktur (nur zur Orientierung)
-public class MyPostprocessor : IP3DPostProcessor
+var parameters = new List<InputFormParameter>
 {
-    public void Initialize(CLData data) { /* Setup */ }
-    public void Fedrat(CLData data) { /* Vorschub */ }
-    public void Goto(CLData data) { /* Bewegung */ }
-    public void Done() { /* Nachbearbeitung */ }
+    new InputFormParameter { Name = "Username", Type = InputType.Text, Value = "" },
+    new InputFormParameter { Name = "UseCooling", Type = InputType.Checkbox, Value = false },
+    new InputFormParameter { Name = "Speed", Type = InputType.Integer, Value = 1000 },
+    new InputFormParameter { Name = "Precision", Type = InputType.Float, Value = 0.01f },
+    new InputFormParameter { Name = "ToolType", Type = InputType.ComboBox, Value = "Drill", DataSource = new string[] { "Drill", "Mill", "Lathe" } }
+};
+
+if (FormInput.TryGetValues("Parameter Eingabe", parameters, out Dictionary<string, object> result))
+{
+    // Werte aus 'result' verwenden
 }
 ```
 
-> Bei richtiger Nutzung brauchst du **keine G-Code-Strings selbst formatieren** – das übernimmt das Registersystem vollständig für dich.
+---
+
+## 3. Registersystem: Kern der Codegenerierung
+
+Die Ausgabe von Maschinen-Code erfolgt über das Registersystem. Es ermöglicht die deklarative Definition von Steuerzeichen und automatisiert Formatierung, Wertvergleich und Zeilenausgabe.
+
+### 3.1 Register anlegen (`RegisterAdd`)
+
+```csharp
+void RegisterAdd(string name, string outputName, int decimalPlaces = 3, int leadingZeros = 0, int trailingZeros = 0)
+```
+
+- `name`: Interner Name für das Register (z. B. `"X"`, `"G"`)
+- `outputName`: Kürzel im Maschinen-Code (z. B. `"X"`, `"G"`)
+- `decimalPlaces`: Anzahl Dezimalstellen bei Zahlen (z. B. `4` für `X123.4567`)
+- `leadingZeros`: Mindestanzahl führender Stellen vor Komma
+- `trailingZeros`: Mindestanzahl Nachkommastellen, wird mit Nullen aufgefüllt
+
+### 3.2 Werte setzen (`RegisterSetValue`)
+
+```csharp
+void RegisterSetValue(string registerName, object value, bool force = false)
+```
+
+- `registerName`: Name des Registers
+- `value`: Wert, z. B. `float`, `int` oder `string`
+- `force`: Erzwingt Ausgabe auch wenn Wert unverändert
+
+### 3.3 Prüfen auf Änderungen (`ShouldOutblock`)
+
+```csharp
+bool ShouldOutblock(params string[] registerNames)
+```
+
+Gibt `true` zurück, wenn sich einer der angegebenen Registerwerte seit der letzten Ausgabe geändert hat.
+
+### 3.4 Zeile ausgeben (`OutBlock`)
+
+```csharp
+void OutBlock()
+```
+
+Schreibt eine Zeile mit allen geänderten Registern in den Maschinen-Code.
+
+### 3.5 Automatische Zeilennummern (`StartAutoLineNumber`)
+
+```csharp
+void StartAutoLineNumber(char lineNumberSymbol, int startNum, int interval, int maxNum)
+```
+
+Erzeugt bei jeder Ausgabe automatisch Zeilennummern (z. B. `N10`, `N20`, ...).
+
+### 3.6 Zugriff auf generierten Code
+
+- `string[] RegisterGetCode()` – Holt alle bisher generierten Codezeilen.
+- `void RegisterSetCode(string[] code)` – Setzt bzw. überschreibt die gesamte Codeausgabe.
 
 ---
 
-## 🏢 Lizenz / Hinweise
+## 4. Beispielablauf eines Befehls
 
-Dieses System ist Teil von **P3D** (© Datentechnik Reitz GmbH & Co. KG).  
-Verwendung nur im Rahmen der P3D CAM Software.
+```csharp
+public void Goto(CLData data)
+{
+    RegisterSetValue("X", data["X"]);
+    RegisterSetValue("Y", data["Y"]);
+    RegisterSetValue("Z", data["Z"]);
 
+    if (ShouldOutblock("X", "Y", "Z"))
+    {
+        RegisterSetValue("G", 1); // G1 – lineare Bewegung
+        OutBlock();               // Ausgabe der Befehlszeile
+    }
+}
+```
+
+---
+
+## 5. Zusätzliche Tipps
+
+- Nutze `Output("...")` für Kommentare oder Befehle, die nicht im Register-System abgebildet sind.
+- Achte darauf, Register nur bei Wertänderungen auszugeben, um sauberen und kompakten Code zu erzeugen.
+- Verwalte globale Zustände (z. B. ob gerade Rapidbewegung aktiv ist) in Feldern der Postprozessor-Klasse.
+- Nutze die `Done()`-Methode zur Nachbearbeitung des gesamten Codes vor der finalen Ausgabe.
+
+---
+
+## 6. Zusammenfassung der wichtigsten Methoden
+
+| Methode              | Zweck                                               |
+|----------------------|----------------------------------------------------|
+| `Initialize(CLData)` | Setup & Eingabe, initialisieren von Registern      |
+| `Fedrat(CLData)`     | Vorschub setzen                                    |
+| `Goto(CLData)`       | Linearbewegung umsetzen                             |
+| `Rapid(CLData)`      | Schnelle Positionierung                             |
+| `PPrint(CLData)`     | Kommentar ausgeben                                  |
+| `MultAx(CLData)`     | Mehr-Achsen-Modus setzen                            |
+| `Done()`             | Abschlussarbeiten, Code final bearbeiten            |
+
+---
+
+## 7. Verwendete Typen
+
+- **`CLData`**: Container mit Positions- und Zustandsinformationen der aktuellen Befehlszeile.
+- **`InputFormParameter`**: Definiert Parameter für dynamische Eingabemasken.
+- **`InputType`**: Enum mit Typen für Eingabefelder (Text, Checkbox, Integer, Float, ComboBox).
+
+---
+
+# Schlusswort
+
+Das P3D Postprozessor-System bietet eine flexible und robuste Basis für maschinenspezifische Codeerzeugung. Durch das Registersystem und das modulare Interface können Entwickler mit C#-Erfahrung schnell eigene Postprozessoren für verschiedenste Maschinentypen schreiben.
+
+Für Fragen oder Erweiterungen empfiehlt es sich, den Beispielcode eingehend zu studieren und die Methoden schrittweise zu implementieren.
+
+---
+
+*Ende der Dokumentation*
