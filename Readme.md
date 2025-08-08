@@ -110,7 +110,24 @@ Erzeugt bei jeder Ausgabe automatisch Zeilennummern (z. B. `N10`, `N20`, ...).
 
 ---
 
-## 4. Beispielablauf eines Befehls
+## 4. Verwendung von Wildcards (Platzhaltern) in Registern
+
+Das Registersystem unterstützt sogenannte Wildcards (Platzhalter) in den Ausgabetexten der Register. Beispielsweise kannst du ein Register mit einem Ausgabeformat definieren, das Variablen enthält, welche bei der Ausgabe durch den aktuellen Registerwert ersetzt werden.
+
+Beispiel:
+
+```csharp
+// Register mit Wildcard {@} definieren
+RegisterAdd("I", "AC({@})");
+```
+
+- Hier wird `{@}` durch den aktuellen Wert des Registers `I` ersetzt.
+- Wenn du also `RegisterSetValue("I", 5)` aufrufst, wird im Maschinen-Code `AC(5)` ausgegeben.
+- Dies erlaubt flexible und komplexe Formate direkt im Registerausgabe-String.
+
+---
+
+## 5. Beispielablauf eines Befehls
 
 ```csharp
 public void Goto(CLData data)
@@ -129,7 +146,7 @@ public void Goto(CLData data)
 
 ---
 
-## 5. Zusätzliche Tipps
+## 6. Zusätzliche Tipps
 
 - Nutze `Output("...")` für Kommentare oder Befehle, die nicht im Register-System abgebildet sind.
 - Achte darauf, Register nur bei Wertänderungen auszugeben, um sauberen und kompakten Code zu erzeugen.
@@ -138,7 +155,7 @@ public void Goto(CLData data)
 
 ---
 
-## 6. Zusammenfassung der wichtigsten Methoden
+## 7. Zusammenfassung der wichtigsten Methoden
 
 | Methode              | Zweck                                               |
 |----------------------|----------------------------------------------------|
@@ -152,7 +169,7 @@ public void Goto(CLData data)
 
 ---
 
-## 7. Verwendete Typen
+## 8. Verwendete Typen
 
 - **`CLData`**: Container mit Positions- und Zustandsinformationen der aktuellen Befehlszeile.
 - **`InputFormParameter`**: Definiert Parameter für dynamische Eingabemasken.
@@ -162,7 +179,7 @@ public void Goto(CLData data)
 
 # Schlusswort
 
-Das P3D Postprozessor-System bietet eine flexible und robuste Basis für maschinenspezifische Codeerzeugung. Durch das Registersystem und das modulare Interface können Entwickler mit C#-Erfahrung schnell eigene Postprozessoren für verschiedenste Maschinentypen schreiben.
+Das P3D Postprozessor-System bietet eine flexible und robuste Basis für maschinenspezifische Codeerzeugung. Durch das Registersystem mit Unterstützung von Wildcards und das modulare Interface können Entwickler mit C#-Erfahrung schnell eigene Postprozessoren für verschiedenste Maschinentypen schreiben.
 
 Für Fragen oder Erweiterungen empfiehlt es sich, den Beispielcode eingehend zu studieren und die Methoden schrittweise zu implementieren.
 
