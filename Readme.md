@@ -118,11 +118,11 @@ Beispiel:
 
 ```csharp
 // Register mit Wildcard {@} definieren
-RegisterAdd("I", "AC({@})");
+RegisterAdd("I", "I=AC({@})");
 ```
 
 - Hier wird `{@}` durch den aktuellen Wert des Registers `I` ersetzt.
-- Wenn du also `RegisterSetValue("I", 5)` aufrufst, wird im Maschinen-Code `AC(5)` ausgegeben.
+- Wenn du also `RegisterSetValue("I", 5)` aufrufst, wird im Maschinen-Code `I=AC(5)` ausgegeben.
 - Dies erlaubt flexible und komplexe Formate direkt im Registerausgabe-String.
 
 ---
