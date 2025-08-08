@@ -1,122 +1,222 @@
-🛠️ Anleitung zur Erstellung eines P3D Post-Prozessors
-Ein P3D-Post-Prozessor ist eine C#-Klasse, die das Interface IP3DPostProcessor implementiert. Er dient als Übersetzer von APT-Code in maschinenspezifischen Code. Anhand des bereitgestellten Beispiels erkläre ich dir die einzelnen Schritte und Bestandteile.
+# 📄 P3D Postprozessor System – Dokumentation
 
-1. Die Klasse und das Interface
-Deine Post-Prozessor-Klasse muss das Interface IP3DPostProcessor implementieren. Dadurch wird sichergestellt, dass deine Klasse über alle notwendigen Methoden verfügt, die der Executor aufrufen wird, um die APT-Befehle zu verarbeiten.
+## 📚 Inhalt
 
-C#
+- [Einleitung](#einleitung)
+- [Systemarchitektur](#systemarchitektur)
+- [Projektstruktur](#projektstruktur)
+- [Postprozessor Interface (IP3DPostProcessor)](#postprozessor-interface-ip3dpostprocessor)
+- [Register-System](#register-system)
+- [APT Parser](#apt-parser)
+- [Dynamische Eingabe-Formulare](#dynamische-eingabe-formulare)
+- [Postprozessor-Beispiel (PostProcessor.cs)](#postprozessor-beispiel-postprocessorcs)
+- [Test & Ausführung](#test--ausführung)
+- [Erweiterungsideen](#erweiterungsideen)
 
-public class PostProcessor : IP3DPostProcessor
-2. Globale Variablen
-Globale Variablen werden verwendet, um den aktuellen Status der Maschine zu verfolgen.
+---
 
-_multAx: Ein bool, der den Zustand der mehrachsigen Bearbeitung speichert.
+## Einleitung
 
-_isRapid: Ein bool, der angibt, ob die aktuelle Bewegung eine Eilgangbewegung (G0) ist.
+Das P3D-Postprozessor-System ist ein flexibles und erweiterbares Framework zum Ausführen von benutzerdefinierten Postprozessoren auf Basis einer APT-ähnlichen Eingabedatei. Es unterstützt dynamisches Parsen, eine Plugin-basierte Architektur sowie eine UI-basierte Parametereingabe.
 
-C#
+---
 
-private bool _multAx = false;
-private bool _isRapid = false;
-3. Die Initialize-Methode
-Diese Methode ist der Einstiegspunkt des Post-Prozessors und wird nur einmal am Anfang aufgerufen. Sie dient der Initialisierung.
+## Systemarchitektur
 
-StartAutoLineNumber(lineNumberSymbol: 'N', startNum: 10, interval: 10, maxNum: 5000);
+```
++-----------------------+
+|       P3D_PP_Executor |
++----------+------------+
+           |
+           | lädt DLL (Postprozessor Plugin)
+           v
++----------+------------+
+|  IP3DPostProcessor    |
+|  (PostProcessor.cs)   |
++----------+------------+
+           |
+           v
++----------+------------+
+|   Register-System     |
++-----------------------+
+           |
+           v
++-----------------------+
+|  APT-Parser           |
++-----------------------+
+           |
+           v
++-----------------------+
+|  Ausgabe: G-Code TXT  |
++-----------------------+
+```
 
-Funktion: Konfiguriert die automatische Zeilennummerierung.
+---
 
-Argumente:
+## Projektstruktur
 
-lineNumberSymbol: Das Symbol für die Zeilennummer (N).
+- `P3D_PP_Executor`  
+  Hauptprogramm, das APT-Dateien einliest, DLL lädt und den Postprozessor ausführt.
 
-startNum: Die Startnummer der Zeilen (hier 10).
+- `P3D_Postprocessors`  
+  Enthält das zentrale `IP3DPostProcessor`-Interface, das Register-System und Hilfsklassen wie `CLData`.
 
-interval: Der Inkrement-Wert für die Zeilennummerierung (hier 10).
+- `P3DPP`  
+  Dynamische Eingabeformulare über `FormInput` mit Unterstützung für verschiedene Eingabetypen.
 
-maxNum: Die maximale Zeilennummer, bevor wieder bei startNum begonnen wird.
+---
 
-RegisterAdd("G", "G", decimalPlaces: 1, leadingZeros: 1);
+## Postprozessor Interface (`IP3DPostProcessor`)
 
-Funktion: Definiert eine "Register"-Variable, die im G-Code ausgegeben wird.
+```csharp
+public interface IP3DPostProcessor
+{
+    void Initialize(CLData data);
+    void Goto(CLData data);
+    void Fedrat(CLData data);
+    void Rapid(CLData data);
+    void PPrint(CLData data);
+    void MultAx(CLData data);
+    void Done();
+}
+```
 
-Argumente:
+Diese Methoden werden je nach APT-Befehl aufgerufen. Alle Argumente werden über `CLData` übergeben.
 
-"G": Der interne Name des Registers.
+---
 
-"G": Das Symbol, das im G-Code verwendet wird.
+## Register-System
 
-decimalPlaces: Anzahl der Nachkommastellen (hier 1).
+Zentrale Komponente für das Erstellen von G-Code Zeilen. Bietet:
 
-leadingZeros: Anzahl der führenden Nullen (hier 1).
+### Beispiel: Register initialisieren
+```csharp
+RegisterAdd("X", "X", decimalPlaces: 4, trailingZeros: 5);
+RegisterAdd("F", "F");
+```
 
-Output($"; ...\n;");
+### Werte setzen
+```csharp
+RegisterSetValue("X", 12.3456);
+```
 
-Funktion: Schreibt eine Zeile in den Ausgabepuffer.
+### Outblock erzeugen
+```csharp
+OutBlock();
+```
 
-Argument: Der String, der ausgegeben werden soll. Hier wird der Header mit Kommentaren (;) erzeugt.
+### G-Code abrufen oder überschreiben
+```csharp
+string[] code = RegisterGetCode();
+RegisterSetCode(code);
+```
 
-4. Die Fedrat-Methode
-Diese Methode wird aufgerufen, wenn der APT-Befehl FEDRAT (Vorschubgeschwindigkeit) auftritt.
+---
 
-_isRapid = false;: Setzt den Eilgang-Status auf false, da eine Vorschubbewegung bevorsteht.
+## APT Parser
 
-RegisterSetValue("F", data["F"]);:
+Das APT-ähnliche Format wird in `AptCommand`-Objekte umgewandelt:
 
-Funktion: Aktualisiert den Wert eines Registers.
+### Unterstützte Befehle:
 
-Argumente:
+- `GOTO / x, y, z`
+- `FEDRAT / value`
+- `RAPID`
+- `PPRINT / 'comment'`
+- `MULTAX / ON|OFF`
 
-"F": Der Name des zu aktualisierenden Registers.
+### Beispiel:
+```text
+PPRINT / 'Hello World'
+FEDRAT / 500
+GOTO / 12.5, 25.7, -1.0
+```
 
-data["F"]: Der neue Wert aus dem APT-Code.
+Jeder Befehl wird in ein `AptCommand`-Objekt mit Argument-Dictionary übersetzt.
 
-Es gibt keinen OutBlock()-Aufruf, da der Vorschubwert erst zusammen mit der nächsten Bewegung ausgegeben werden soll.
+---
 
-5. Die Goto-Methode
-Diese Methode wird für jede Bewegung (GOTO) aufgerufen. Hier werden die Koordinaten verarbeitet und ausgegeben.
+## Dynamische Eingabeformulare
 
-RegisterSetValue("X", data["X"]);:
+Die Klasse `FormInput` erlaubt benutzerdefinierte Eingaben über ein dynamisch generiertes Formular.
 
-Funktion: Aktualisiert die X-Koordinate aus den data-Argumenten.
+### Unterstützte Typen (`InputType`)
+- `Text`
+- `Checkbox`
+- `Integer`
+- `Float`
+- `ComboBox`
 
-if (ShouldOutblock("X","Y","Z")):
+### Beispiel-Aufruf:
+```csharp
+var parameters = new List<InputFormParameter>
+{
+    new InputFormParameter { Name = "Speed", Type = InputType.Float, Value = 100.0f },
+    new InputFormParameter { Name = "Enable Feature", Type = InputType.Checkbox, Value = true },
+    new InputFormParameter { Name = "Mode", Type = InputType.ComboBox, Value = "Fast", DataSource = new[] { "Fast", "Slow" } }
+};
 
-Funktion: Überprüft, ob sich der Wert eines der angegebenen Register (hier X, Y oder Z) seit dem letzten OutBlock()-Aufruf geändert hat.
+if (FormInput.TryGetValues("Settings", parameters, out var values)) {
+    // Verarbeitung...
+}
+```
 
-Argumente: Die Namen der Register, die überwacht werden sollen.
+---
 
-RegisterSetValue("G", cmd, true);:
+## Postprozessor-Beispiel (`PostProcessor.cs`)
 
-Funktion: Setzt den G-Befehl (0 für Eilgang oder 1 für Vorschub). Der dritte Parameter true stellt sicher, dass dieses Register beim nächsten OutBlock()-Aufruf definitiv ausgegeben wird, auch wenn sich der Wert nicht geändert hat (was hier notwendig ist, da der G-Code-Befehl immer vor den Koordinaten stehen muss).
+Ein Beispiel eines konkreten Postprozessors.
 
-OutBlock();:
+### Wichtige Eigenschaften:
 
-Funktion: Sammelt alle Register, deren ShouldOutblock-Flag auf true gesetzt ist, formatiert sie gemäß den Einstellungen aus RegisterAdd und schreibt sie als eine einzelne Zeile in den Ausgabepuffer.
+- `_multAx` und `_isRapid` speichern Zustand
+- `GetInputValues()` fragt UI-Parameter beim Start ab
+- `Initialize()` initialisiert Register und Kopfzeile
+- `Goto()`, `Fedrat()`, `Rapid()` etc. setzen Register und erzeugen G-Code-Zeilen
 
-6. Die Rapid-Methode
-Diese Methode wird aufgerufen, wenn der APT-Befehl RAPID auftritt.
+### Beispiel OutBlock:
+```csharp
+RegisterSetValue("X", data["X"]);
+RegisterSetValue("G", 1, true);
+OutBlock();
+```
 
-_isRapid = true;: Setzt den Eilgang-Status auf true.
+---
 
-7. Die PPrint-Methode
-Diese Methode wird für den APT-Befehl PPRINT (Kommentar) aufgerufen.
+## Test & Ausführung
 
-Output($"; {data["Comment"]}");:
+### APT-Testdatei
+```text
+PPRINT / 'Start'
+FEDRAT / 500
+GOTO / 12.5, 25.7, -1.0
+RAPID
+GOTO / 30.0, 50.0, 10.0
+```
 
-Funktion: Schreibt den Kommentar in den Ausgabepuffer, formatiert als G-Code-Kommentar (beginnend mit ;).
+### Programmstart (Testmode):
+```csharp
+var ppPath = "../../../TestPP/bin/Debug/TestPP.dll";
+var aptPath = "../../../p3dAPT.txt";
+var outPutPath = "../../../test.txt";
+```
 
-8. Die MultAx-Methode
-Diese Methode behandelt den APT-Befehl MULTAX für mehrachsige Bewegungen.
+Die Ausgabe wird in `test.txt` geschrieben.
 
-if (data["State"].ToString() == "ON"): Überprüft den Zustand im APT-Code, um die globale Variable _multAx zu setzen.
+---
 
-9. Die Done-Methode
-Diese Methode wird einmal ganz am Ende aufgerufen, nachdem alle APT-Befehle verarbeitet wurden.
+## Erweiterungsideen
 
-string[] gcodeLines = RegisterGetCode();: Holt den gesamten generierten G-Code aus dem Puffer als Array.
+- [ ] Unterstützung für weitere APT-Befehle (`CIRCLE`, `SPINDL`, etc.)
+- [ ] Validierung von FormInput-Feldern (z. B. Pflichtfelder)
+- [ ] Presets für Eingabemasken
+- [ ] Erweiterte G-Code Templates (z. B. Tool-Change Handling)
+- [ ] Plugin-Auswahl bei mehreren Typen in DLL
+- [ ] Unterstützung für mehr als einen Postprozessor pro DLL
 
-Hier kannst du den fertigen Code weiterverarbeiten oder ändern (z. B. zusätzliche Zeilen am Ende hinzufügen oder eine spezielle Formatierung vornehmen).
+---
 
-RegisterSetCode(gcodeLines);: Schreibt den möglicherweise modifizierten Code zurück in den Puffer.
+## Lizenz / Info
 
-Mit diesem Gerüst kannst du deinen eigenen Post-Prozessor erstellen, indem du die Logik innerhalb der Methoden an die spezifischen Anforderungen deiner CNC-Maschine anpasst.
+© Datentechnik Reitz GmbH & Co. KG  
+Dieses System ist intern für P3D Postprozessor-Verarbeitung gedacht.
