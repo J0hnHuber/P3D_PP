@@ -63,8 +63,8 @@ Die Ausgabe von Maschinen-Code erfolgt über das Registersystem. Es ermöglicht 
 void RegisterAdd(string name, string outputName, int decimalPlaces = 3, int leadingZeros = 0, int trailingZeros = 0)
 ```
 
-- `name`: Interner Name für das Register (z. B. `"X"`, `"G"`)
-- `outputName`: Kürzel im Maschinen-Code (z. B. `"X"`, `"G"`)
+- `name`: Interner Name für das Register (z. B. `"X"`, `"I"`)
+- `outputName`: Kürzel im Maschinen-Code (z. B. `"X"`, `"I=AC({@})"`)
 - `decimalPlaces`: Anzahl Dezimalstellen bei Zahlen (z. B. `4` für `X123.4567`)
 - `leadingZeros`: Mindestanzahl führender Stellen vor Komma
 - `trailingZeros`: Mindestanzahl Nachkommastellen, wird mit Nullen aufgefüllt
