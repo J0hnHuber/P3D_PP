@@ -13,7 +13,7 @@ Die Verwendung der Visual Studio Vorlage bietet folgende Vorteile:
 ## Schritte zur Verwendung der Postprozessor-Vorlage
 
 1.  **Beschaffen Sie die P3D Postprozessor Vorlage:**
-    * Die Visual Studio Vorlage wird Ihnen üblicherweise vom P3D-Team als ZIP-Datei oder über einen anderen Kommunikationskanal bereitgestellt.
+    * Die Visual Studio Vorlage wird Ihnen üblicherweise vom DTR-Team als ZIP-Datei oder über einen anderen Kommunikationskanal bereitgestellt.
     * Speichern Sie die Vorlagendatei an einem leicht zugänglichen Ort auf Ihrem lokalen Rechner.
 
 2.  **Installieren Sie die Vorlage in Visual Studio:**
